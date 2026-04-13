@@ -7,7 +7,7 @@ I tested Meta's new **Muse Spark** model by building a complete marketing studio
 
 **Result after 5–6 prompts:** a single-file, production-ready site with hash routing, GSAP transitions, Lenis smooth scroll, Three.js background, and a warm editorial design.
 
-Live demo: https://YOURUSERNAME.github.io/northstar/
+Live demo: https://o1ie12.github.io/Meta-AI-Muse-Spark-Website-Test/
 
 ## What I asked for
 
