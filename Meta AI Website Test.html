@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Playables SDK -->
+<script>// Playables SDK v1.0.0
+// Game lifecycle bridge: rAF-based game-ready detection + event communication
+(function() {
+  'use strict';
+
+  // Idempotency: skip if already initialized (e.g., server-side injection
+  // followed by client-side inject-javascript via the Bloks webview component).
+  if (window.playablesSDK) return;
+
+  var HANDLER_NAME = 'playablesGameEventHandler';
+  var ANDROID_BRIDGE_NAME = '_MetaPlayablesBridge';
+  var RAF_FRAME_THRESHOLD = 3;
+
+  var gameReadySent = false;
+  var firstInteractionSent = false;
+  var errorSent = false;
+  var frameCount = 0;
+  var originalRAF = window.requestAnimationFrame;
+
+  // --- Transport Layer ---
+
+  function hasIOSBridge() {
+    return !!(window.webkit &&
+              window.webkit.messageHandlers &&
+              window.webkit.messageHandlers[HANDLER_NAME]);
+  }
+
+  function hasAndroidBridge() {
+    return !!(window[ANDROID_BRIDGE_NAME] &&
+              typeof window[ANDROID_BRIDGE_NAME].postEvent === 'function');
+  }
+
+  function isInIframe() {
+    return !!(window.parent && window.parent !== window);
+  }
+
+  function sendEvent(eventName, payload) {
+    var message = {
+      type: eventName,
+      payload: payload || {},
+      timestamp: Date.now()
+    };
+
+    if (hasIOSBridge()) {
+      try {
+        window.webkit.messageHandlers[HANDLER_NAME].postMessage(message);
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
+    if (hasAndroidBridge()) {
+    try {
+      var p = payload || {};
+      p.__secureToken = window.__fbAndroidBridgeAuthToken || '';
+      window[ANDROID_BRIDGE_NAME].postEvent(
+        eventName,
+        JSON.stringify(p)
+      );
+    } catch (e) { /* ignore */ }
+    return;
+  }
+
+    if (isInIframe()) {
+      try {
+        window.parent.postMessage(message, '*');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  }
+
+  // --- rAF Game-Ready Detection ---
+
+  function onFrame() {
+    if (gameReadySent) return;
+
+    frameCount++;
+    if (frameCount >= RAF_FRAME_THRESHOLD) {
+      gameReadySent = true;
+      sendEvent('game_ready', {
+        frame_count: frameCount,
+        detected_at: Date.now()
+      });
+      return;
+    }
+
+    originalRAF.call(window, onFrame);
+  }
+
+  if (originalRAF) {
+    window.requestAnimationFrame = function(callback) {
+      if (!gameReadySent) {
+        return originalRAF.call(window, function(timestamp) {
+          frameCount++;
+          if (frameCount >= RAF_FRAME_THRESHOLD && !gameReadySent) {
+            gameReadySent = true;
+            sendEvent('game_ready', {
+              frame_count: frameCount,
+              detected_at: Date.now()
+            });
+          }
+          callback(timestamp);
+        });
+      }
+      return originalRAF.call(window, callback);
+    };
+  }
+
+  // --- First User Interaction Detection ---
+
+  function setupFirstInteractionDetection() {
+    var events = ['touchstart', 'mousedown', 'keydown'];
+
+    function onFirstInteraction() {
+      if (firstInteractionSent) return;
+      firstInteractionSent = true;
+      sendEvent('user_interaction_start', null);
+
+      for (var i = 0; i < events.length; i++) {
+        document.removeEventListener(events[i], onFirstInteraction, true);
+      }
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      document.addEventListener(events[i], onFirstInteraction, true);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFirstInteractionDetection);
+  } else {
+    setupFirstInteractionDetection();
+  }
+
+  // --- Auto Error Capture ---
+
+  window.addEventListener('error', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    sendEvent('error', {
+      message: event.message || 'Unknown error',
+      source: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+      auto_captured: true
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function(event) {
+    if (errorSent) return;
+    errorSent = true;
+    var reason = event.reason;
+    sendEvent('error', {
+      message: (reason instanceof Error) ? reason.message : String(reason),
+      type: 'unhandled_promise_rejection',
+      auto_captured: true
+    });
+  });
+
+  // --- Public API ---
+
+  window.playablesSDK = {
+    complete: function(score) {
+      sendEvent('game_ended', {
+        score: score,
+        completed: true
+      });
+    },
+
+    error: function(message) {
+      if (errorSent) return;
+      errorSent = true;
+      sendEvent('error', {
+        message: message || 'Unknown error',
+        auto_captured: false
+      });
+    },
+
+    sendEvent: function(eventName, payload) {
+      if (!eventName || typeof eventName !== 'string') return;
+      sendEvent(eventName, payload);
+    }
+  };
+
+  // Kick off rAF detection in case no game code calls rAF immediately
+  if (originalRAF) {
+    originalRAF.call(window, onFrame);
+  }
+})();</script>
+<script>window.Intl=window.Intl||{};Intl.t=function(s){return(Intl._locale&&Intl._locale[s])||s;};</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Northstar Consulting — Strategy with soul</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://unpkg.com/@studio-freight/lenis@1.0.42/dist/lenis.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {
+  --ivory:#FAF7F2;
+  --charcoal:#1A1A1A;
+  --sage:#8B9B8F;
+  --sand:#E6DDD3;
+  --terracotta:#B66A4E;
+}
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html { scrollbar-gutter: stable; }
+body {
+  background: var(--ivory);
+  color: var(--charcoal);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.font-serif { font-family: 'Fraunces', Georgia, serif; font-weight: 400; }
+::selection { background: var(--sand); }
+.cursor-dot {
+  position: fixed; top:0; left:0; width:6px; height:6px; background: var(--terracotta);
+  border-radius:50%; pointer-events:none; z-index:99999; transform:translate(-50%,-50%);
+  transition: width .25s, height .25s, opacity .25s, background .25s; mix-blend-mode:multiply; opacity:.85;
+}
+.cursor-dot.is-hover { width:24px; height:24px; opacity:.25; background:var(--sage); }
+@media (hover:none){ .cursor-dot{display:none} }
+.nav-link { position:relative; }
+.nav-link::after {
+  content:''; position:absolute; left:0; bottom:-4px; width:100%; height:1px;
+  background:currentColor; transform:scaleX(0); transform-origin:right; transition:transform .4s cubic-bezier(.19,1,.22,1);
+}
+.nav-link:hover::after, .nav-link.active::after { transform:scaleX(1); transform-origin:left; }
+.wool-texture {
+  background-image: radial-gradient(circle at 1px 1px, rgba(26,26,26,0.03) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+#hero-canvas { position:absolute; inset:-20% 0; width:100%; height:140%; pointer-events:none; opacity:.5; z-index:0; }
+.project-card img { transition: transform 1.2s cubic-bezier(.16,1,.3,1), filter .6s; }
+.project-card:hover img { transform:scale(1.05); filter:brightness(.97); }
+.smooth-hidden { display:none !important; }
+</style>
+</head>
+<body class="overflow-x-hidden">
+<div class="cursor-dot" id="cursor"></div>
+
+<!-- NAV -->
+<nav class="fixed top-0 w-full z-40 border-b border-[#1A1A1A]/[0.06] bg-[#FAF7F2]/80 backdrop-blur-xl">
+  <div class="max-w-[1400px] mx-auto px-6 lg:px-12 h-[76px] flex items-center justify-between">
+    <a href="#home" data-nav="home" class="flex items-center gap-3">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 2L17.5 10.5L26 14L17.5 17.5L14 26L10.5 17.5L2 14L10.5 10.5L14 2Z" stroke="#1A1A1A" stroke-opacity=".8" fill="none"/></svg>
+      <span class="text-[15px] tracking-[0.14em] uppercase font-medium">Northstar</span>
+    </a>
+    <div class="hidden md:flex items-center gap-10 text-[14px] tracking-wide">
+      <a href="#services" data-nav="services" class="nav-link py-2">Services</a>
+      <a href="#work" data-nav="work" class="nav-link py-2">Work</a>
+      <a href="#studio" data-nav="studio" class="nav-link py-2">Studio</a>
+      <a href="#journal" data-nav="journal" class="nav-link py-2">Journal</a>
+      <a href="#contact" data-nav="contact" class="nav-link py-2">Contact</a>
+    </div>
+    <button id="menuBtn" class="md:hidden w-8 h-8 relative">
+      <span class="absolute w-5 h-[1.5px] bg-[#1A1A1A] left-1.5 top-[10px] transition"></span>
+      <span class="absolute w-5 h-[1.5px] bg-[#1A1A1A] left-1.5 top-[17px] transition"></span>
+    </button>
+  </div>
+  <div id="mobileMenu" class="md:hidden absolute top-[76px] left-0 w-full bg-[#FAF7F2] border-b border-[#1A1A1A]/10 hidden">
+    <div class="px-6 py-6 flex flex-col gap-4 text-[15px]">
+      <a href="#services" data-nav="services" class="py-2">Services</a>
+      <a href="#work" data-nav="work" class="py-2">Work</a>
+      <a href="#studio" data-nav="studio" class="py-2">Studio</a>
+      <a href="#journal" data-nav="journal" class="py-2">Journal</a>
+      <a href="#contact" data-nav="contact" class="py-2">Contact</a>
+    </div>
+  </div>
+</nav>
+
+<main id="app" class="pt-[76px]">
+  <!-- HOME -->
+  <section data-page="home" id="page-home" class="page">
+    <div class="relative overflow-hidden">
+      <canvas id="hero-canvas"></canvas>
+      <div class="max-w-[1400px] mx-auto px-6 lg:px-12 relative z-10">
+        <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-16 lg:gap-24 pt-16 lg:pt-28 pb-20 lg:pb-28 items-center min-h-[82vh]">
+          <div>
+            <h1 class="font-serif text-[clamp(56px,9vw,108px)] leading-[0.82] tracking-[-0.02em]">Strategy<br>with soul.</h1>
+            <p class="mt-10 text-[18px] lg:text-[20px] leading-relaxed text-[#1A1A1A]/70 max-w-[460px] font-light">Thoughtful marketing for brands that care about craft, culture, and longevity.</p>
+            <div class="mt-14 flex items-center gap-8">
+              <a href="#work" class="group inline-flex items-center gap-3 text-[14px] tracking-wide">
+                <span class="border-b border-[#1A1A1A]/30 pb-1.5 group-hover:border-[#1A1A1A] transition">View work</span>
+                <span class="w-8 h-8 rounded-full border border-[#1A1A1A]/20 flex items-center justify-center group-hover:bg-[#1A1A1A] group-hover:text-[#FAF7F2] transition">→</span>
+              </a>
+              <a href="#studio" class="text-[14px] tracking-wide text-[#1A1A1A]/60 hover:text-[#1A1A1A] transition border-b border-transparent hover:border-current pb-1.5">Our studio</a>
+            </div>
+          </div>
+          <div class="relative">
+            <div class="aspect-[4/5] lg:aspect-[3/4] w-full overflow-hidden bg-[#E6DDD3] relative">
+              <img src="https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200&q=80&auto=format" alt="Warm studio interior with natural light" class="w-full h-full object-cover">
+              <div class="absolute inset-0 bg-[#B66A4E]/[0.04] mix-blend-multiply"></div>
+            </div>
+            <div class="absolute -bottom-8 -left-8 w-32 h-32 bg-[#8B9B8F]/20 blur-3xl rounded-full"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="border-y border-[#1A1A1A]/[0.08]">
+      <div class="max-w-[1400px] mx-auto px-6 lg:px-12">
+        <div class="py-10 lg:py-12 flex flex-col lg:flex-row lg:items-center gap-6 lg:gap-20">
+          <div class="text-[11px] tracking-[0.2em] uppercase text-[#1A1A1A]/40 shrink-0">Selected clients</div>
+          <div class="flex flex-wrap items-center gap-x-14 gap-y-4 lg:gap-x-24 text-[13px] tracking-[0.22em] font-light text-[#1A1A1A]/55">
+            <span>ATELIER</span><span>FORM</span><span>MARE</span><span>KIN</span><span>NOVA</span><span>LUMEN</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-24 lg:py-32">
+      <div class="flex items-end justify-between mb-14 lg:mb-20">
+        <h2 class="font-serif text-[40px] lg:text-[56px] leading-[1.1] tracking-[-0.01em]">Featured work</h2>
+        <a href="#work" class="hidden md:inline text-[13px] tracking-widest uppercase text-[#1A1A1A]/60 hover:text-[#1A1A1A] border-b border-[#1A1A1A]/20 pb-1">All projects</a>
+      </div>
+      <div class="grid md:grid-cols-3 gap-12 lg:gap-14">
+        <article class="project-card group cursor-pointer" data-open="mare">
+          <div class="aspect-[4/5] overflow-hidden bg-[#E6DDD3] mb-6">
+            <img src="https://images.unsplash.com/photo-1493106641515-6b5631de4bb9?w=1000&q=80" alt="Mare Ceramics" class="w-full h-full object-cover">
+          </div>
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="font-serif text-[26px] leading-tight">Mare Ceramics</h3>
+              <p class="text-[14px] text-[#1A1A1A]/60 mt-1">A quiet rebrand for a coastal maker</p>
+            </div>
+            <span class="text-[10px] tracking-[0.18em] uppercase px-2.5 py-1 border border-[#1A1A1A]/15 rounded-full">Brand</span>
+          </div>
+        </article>
+        <article class="project-card group cursor-pointer md:mt-16" data-open="kin">
+          <div class="aspect-[4/5] overflow-hidden bg-[#E6DDD3] mb-6">
+            <img src="https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=1000&q=80" alt="Kin Skincare" class="w-full h-full object-cover">
+          </div>
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="font-serif text-[26px] leading-tight">Kin Skincare</h3>
+              <p class="text-[14px] text-[#1A1A1A]/60 mt-1">Growth without the hype cycle</p>
+            </div>
+            <span class="text-[10px] tracking-[0.18em] uppercase px-2.5 py-1 border border-[#1A1A1A]/15 rounded-full">Growth</span>
+          </div>
+        </article>
+        <article class="project-card group cursor-pointer" data-open="form">
+          <div class="aspect-[4/5] overflow-hidden bg-[#E6DDD3] mb-6">
+            <img src="https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=1000&q=80" alt="Form Architecture" class="w-full h-full object-cover">
+          </div>
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="font-serif text-[26px] leading-tight">Form Architecture</h3>
+              <p class="text-[14px] text-[#1A1A1A]/60 mt-1">Editorial system for practice</p>
+            </div>
+            <span class="text-[10px] tracking-[0.18em] uppercase px-2.5 py-1 border border-[#1A1A1A]/15 rounded-full">Content</span>
+          </div>
+        </article>
+      </div>
+    </div>
+
+    <div class="bg-[#E6DDD3]/50 wool-texture border-y border-[#1A1A1A]/[0.06]">
+      <div class="max-w-[1000px] mx-auto px-6 lg:px-12 py-24 lg:py-32 text-center">
+        <div class="font-serif text-[140px] leading-none text-[#B66A4E]/25 select-none">“</div>
+        <blockquote class="font-serif text-[28px] lg:text-[38px] leading-[1.3] tracking-[-0.01em] -mt-16 text-balance">
+          Northstar helped us find a voice that feels like us — considered, warm, and built to last. Our sales grew, but more importantly, our story finally made sense.
+        </blockquote>
+        <div class="mt-14 flex flex-col items-center gap-4">
+          <img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80" alt="Elena Torres" class="w-14 h-14 rounded-full object-cover grayscale-[10%]">
+          <div>
+            <div class="text-[14px] font-medium tracking-wide">Elena Torres</div>
+            <div class="text-[13px] text-[#1A1A1A]/60">Founder, Mare Ceramics</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section data-page="services" id="page-services" class="page hidden">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-20 lg:py-28">
+      <div class="max-w-[720px]">
+        <p class="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]/50 mb-6">Services</p>
+        <h1 class="font-serif text-[clamp(40px,6vw,72px)] leading-[1.05] tracking-[-0.02em]">Clarity first. Everything else follows.</h1>
+        <p class="mt-8 text-[18px] leading-relaxed text-[#1A1A1A]/70 font-light">We work with founders and small teams to shape brand, content, and growth systems that feel human — and actually work.</p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-[1px] bg-[#1A1A1A]/10 mt-20 lg:mt-28 border border-[#1A1A1A]/10">
+        <!-- 6 cards -->
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><circle cx="12" cy="12" r="9"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Brand Strategy</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Positioning, narrative, voice, and visual principles that endure.</p>
+        </div>
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Identity Systems</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Logos, typography, color, and guidelines — built for real use.</p>
+        </div>
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Editorial Content</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Stories, essays, and journals that build trust over time.</p>
+        </div>
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><path d="M3 12h18M12 3v18"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Web Design</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Fast, accessible sites with editorial sensibility.</p>
+        </div>
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><path d="M5 12l5 5L20 7"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Lifecycle Growth</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Email, retention, and measuring what matters.</p>
+        </div>
+        <div class="bg-[#FAF7F2] p-10 lg:p-12">
+          <div class="w-10 h-10 rounded-full border border-[#8B9B8F]/40 flex items-center justify-center mb-8">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B9B8F" stroke-width="1.2"><circle cx="12" cy="8" r="4"/><path d="M6 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+          </div>
+          <h3 class="font-serif text-[24px] mb-3">Creative Direction</h3>
+          <p class="text-[14px] leading-relaxed text-[#1A1A1A]/70">Photography, art direction, and campaign thinking.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WORK -->
+  <section data-page="work" id="page-work" class="page hidden">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-20 lg:py-28">
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8 mb-16">
+        <div>
+          <p class="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]/50 mb-6">Work</p>
+          <h1 class="font-serif text-[clamp(40px,6vw,68px)] leading-[1.05]">Selected projects</h1>
+        </div>
+        <div class="flex gap-3 text-[12px] tracking-wide" id="workFilters">
+          <button data-filter="all" class="px-4 py-1.5 border border-[#1A1A1A] bg-[#1A1A1A] text-[#FAF7F2] rounded-full">All</button>
+          <button data-filter="Brand" class="px-4 py-1.5 border border-[#1A1A1A]/20 rounded-full hover:border-[#1A1A1A]/40">Brand</button>
+          <button data-filter="Growth" class="px-4 py-1.5 border border-[#1A1A1A]/20 rounded-full hover:border-[#1A1A1A]/40">Growth</button>
+          <button data-filter="Content" class="px-4 py-1.5 border border-[#1A1A1A]/20 rounded-full hover:border-[#1A1A1A]/40">Content</button>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-16" id="workGrid">
+        <!-- 9 items -->
+        <article class="project-card cursor-pointer" data-work-item data-category="Brand" data-open="mare">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1493106641515-6b5631de4bb9?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Mare Ceramics</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Brand</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Growth" data-open="kin">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Kin Skincare</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Growth</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Content" data-open="form">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Form Architecture</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Content</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Brand" data-open="atelier">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Atelier Coffee</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Brand</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Content" data-open="nova">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Nova Atelier</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Content</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Brand" data-open="lumen">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Lumen Books</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Brand</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Growth" data-open="otto">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Otto Restaurant</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Growth</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Content" data-open="terra">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Terra Furniture</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Content</span></div>
+        </article>
+        <article class="project-card cursor-pointer" data-work-item data-category="Brand" data-open="sage">
+          <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3]"><img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=80" class="w-full h-full object-cover" alt=""></div>
+          <div class="mt-4 flex justify-between"><h3 class="font-serif text-[22px]">Sage Wellness</h3><span class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50">Brand</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- STUDIO -->
+  <section data-page="studio" id="page-studio" class="page hidden">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-20 lg:py-28">
+      <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-16 items-start">
+        <div>
+          <p class="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]/50 mb-6">Studio</p>
+          <h1 class="font-serif text-[clamp(38px,5.5vw,64px)] leading-[1.08]">A small, senior team for thoughtful brands.</h1>
+          <p class="mt-8 text-[17px] leading-relaxed text-[#1A1A1A]/70 max-w-[560px] font-light">We’re strategists, writers, and designers who’ve led work at independent studios and in-house teams. We prefer depth over volume, and long partnerships over quick wins.</p>
+          <div class="mt-12 grid grid-cols-3 gap-8 max-w-[420px] text-center border-t border-[#1A1A1A]/10 pt-8">
+            <div><div class="font-serif text-[32px]">12</div><div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mt-1">Years</div></div>
+            <div><div class="font-serif text-[32px]">48</div><div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mt-1">Brands</div></div>
+            <div><div class="font-serif text-[32px]">4</div><div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mt-1">People</div></div>
+          </div>
+        </div>
+        <div class="aspect-[4/3] overflow-hidden bg-[#E6DDD3]">
+          <img src="https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200&q=80" class="w-full h-full object-cover" alt="Studio interior">
+        </div>
+      </div>
+
+      <div class="mt-24 lg:mt-32">
+        <h2 class="font-serif text-[32px] mb-12">Team</h2>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-10">
+          <div>
+            <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3] mb-4"><img src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=600&q=80" class="w-full h-full object-cover" alt=""></div>
+            <div class="font-medium">Maya Chen</div><div class="text-[13px] text-[#1A1A1A]/60">Strategy Director</div>
+          </div>
+          <div>
+            <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3] mb-4"><img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80" class="w-full h-full object-cover" alt=""></div>
+            <div class="font-medium">Jonah Patel</div><div class="text-[13px] text-[#1A1A1A]/60">Creative Lead</div>
+          </div>
+          <div>
+            <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3] mb-4"><img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80" class="w-full h-full object-cover" alt=""></div>
+            <div class="font-medium">Sofia Ruiz</div><div class="text-[13px] text-[#1A1A1A]/60">Writer & Editor</div>
+          </div>
+          <div>
+            <div class="aspect-[3/4] overflow-hidden bg-[#E6DDD3] mb-4"><img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&q=80" class="w-full h-full object-cover" alt=""></div>
+            <div class="font-medium">Daniel Okoro</div><div class="text-[13px] text-[#1A1A1A]/60">Growth Designer</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JOURNAL -->
+  <section data-page="journal" id="page-journal" class="page hidden">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-20 lg:py-28">
+      <div class="max-w-[720px] mb-16">
+        <p class="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]/50 mb-6">Journal</p>
+        <h1 class="font-serif text-[clamp(40px,6vw,64px)] leading-[1.05]">Notes on craft, brand, and longevity.</h1>
+      </div>
+      <div class="grid md:grid-cols-2 gap-12 lg:gap-16">
+        <article class="group cursor-pointer" data-open-journal="1">
+          <div class="aspect-[16/10] overflow-hidden bg-[#E6DDD3] mb-6"><img src="https://images.unsplash.com/photo-1455390582262-044cdead277a?w=1000&q=80" class="w-full h-full object-cover transition group-hover:scale-[1.02] duration-700" alt=""></div>
+          <div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-2">Essay — 12 min</div>
+          <h3 class="font-serif text-[28px] leading-tight group-hover:text-[#B66A4E] transition">The case for slower marketing</h3>
+          <p class="mt-3 text-[15px] text-[#1A1A1A]/70 leading-relaxed">Why brands that publish less, but better, compound trust.</p>
+        </article>
+        <article class="group cursor-pointer" data-open-journal="2">
+          <div class="aspect-[16/10] overflow-hidden bg-[#E6DDD3] mb-6"><img src="https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1000&q=80" class="w-full h-full object-cover transition group-hover:scale-[1.02] duration-700" alt=""></div>
+          <div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-2">Framework — 8 min</div>
+          <h3 class="font-serif text-[28px] leading-tight group-hover:text-[#B66A4E] transition">A simple brand brief that works</h3>
+          <p class="mt-3 text-[15px] text-[#1A1A1A]/70 leading-relaxed">Seven questions we ask every client before design starts.</p>
+        </article>
+        <article class="group cursor-pointer" data-open-journal="3">
+          <div class="aspect-[16/10] overflow-hidden bg-[#E6DDD3] mb-6"><img src="https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1000&q=80" class="w-full h-full object-cover transition group-hover:scale-[1.02] duration-700" alt=""></div>
+          <div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-2">Practice — 6 min</div>
+          <h3 class="font-serif text-[28px] leading-tight group-hover:text-[#B66A4E] transition">Designing for longevity</h3>
+          <p class="mt-3 text-[15px] text-[#1A1A1A]/70 leading-relaxed">Systems, not campaigns. How we build to last.</p>
+        </article>
+        <article class="group cursor-pointer" data-open-journal="4">
+          <div class="aspect-[16/10] overflow-hidden bg-[#E6DDD3] mb-6"><img src="https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=1000&q=80" class="w-full h-full object-cover transition group-hover:scale-[1.02] duration-700" alt=""></div>
+          <div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-2">Field notes — 5 min</div>
+          <h3 class="font-serif text-[28px] leading-tight group-hover:text-[#B66A4E] transition">What we learned from makers</h3>
+          <p class="mt-3 text-[15px] text-[#1A1A1A]/70 leading-relaxed">Four lessons from visiting 12 small studios.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section data-page="contact" id="page-contact" class="page hidden">
+    <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-20 lg:py-28">
+      <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-20 items-start">
+        <div>
+          <p class="text-[12px] tracking-[0.2em] uppercase text-[#1A1A1A]/50 mb-6">Contact</p>
+          <h1 class="font-serif text-[clamp(40px,6vw,64px)] leading-[1.05]">Let’s talk about your next chapter.</h1>
+          <p class="mt-6 text-[17px] text-[#1A1A1A]/70 max-w-[520px]">Tell us a bit about your brand, your goals, and your timeline. We’ll reply within two business days.</p>
+          
+          <form id="contactForm" class="mt-14 space-y-6 max-w-[560px]" novalidate>
+            <div class="grid md:grid-cols-2 gap-6">
+              <div><label class="text-[12px] uppercase tracking-widest text-[#1A1A1A]/60">Name</label><input required name="name" class="mt-2 w-full bg-transparent border-b border-[#1A1A1A]/20 py-3 outline-none focus:border-[#B66A4E] transition" placeholder="Your name"></div>
+              <div><label class="text-[12px] uppercase tracking-widest text-[#1A1A1A]/60">Email</label><input required type="email" name="email" class="mt-2 w-full bg-transparent border-b border-[#1A1A1A]/20 py-3 outline-none focus:border-[#B66A4E] transition" placeholder="you@studio.com"></div>
+            </div>
+            <div><label class="text-[12px] uppercase tracking-widest text-[#1A1A1A]/60">Project</label><input name="project" class="mt-2 w-full bg-transparent border-b border-[#1A1A1A]/20 py-3 outline-none focus:border-[#B66A4E] transition" placeholder="Brand, website, growth…"></div>
+            <div><label class="text-[12px] uppercase tracking-widest text-[#1A1A1A]/60">Message</label><textarea required name="message" rows="4" class="mt-2 w-full bg-transparent border-b border-[#1A1A1A]/20 py-3 outline-none focus:border-[#B66A4E] transition resize-none" placeholder="A few sentences about what you’re building"></textarea></div>
+            <button type="submit" class="mt-4 inline-flex items-center gap-3 group">
+              <span class="px-7 py-3 bg-[#1A1A1A] text-[#FAF7F2] text-[13px] tracking-widest uppercase group-hover:bg-[#B66A4E] transition">Send note</span>
+              <span class="w-9 h-9 border border-[#1A1A1A]/20 rounded-full flex items-center justify-center group-hover:border-[#B66A4E] transition">→</span>
+            </button>
+            <p id="formMsg" class="text-[13px] mt-3 h-5"></p>
+          </form>
+        </div>
+        <div class="lg:pt-24">
+          <div class="aspect-[4/3] bg-[#E6DDD3]/60 border border-[#1A1A1A]/10 p-8 lg:p-12 relative overflow-hidden">
+            <div class="absolute inset-0 wool-texture opacity-40"></div>
+            <svg viewBox="0 0 400 300" class="w-full h-full relative z-10" fill="none">
+              <rect x="0" y="0" width="400" height="300" fill="#FAF7F2"/>
+              <path d="M40 200c40-20 80-30 120-20 40 10 80 30 120 20 30-7 60-25 80-40" stroke="#8B9B8F" stroke-opacity=".3" stroke-width="1" fill="none"/>
+              <path d="M40 220c40-10 70-15 110-5 50 12 90 20 130 5 30-11 50-28 80-35" stroke="#8B9B8F" stroke-opacity=".25" stroke-width="1" fill="none"/>
+              <circle cx="200" cy="150" r="3" fill="#B66A4E"/>
+              <circle cx="200" cy="150" r="18" stroke="#B66A4E" stroke-opacity=".2" stroke-width="1"/>
+              <text x="200" y="185" text-anchor="middle" font-family="Inter" font-size="11" fill="#1A1A1A" opacity=".6">NORTHSTAR STUDIO</text>
+              <text x="200" y="200" text-anchor="middle" font-family="Inter" font-size="10" fill="#1A1A1A" opacity=".4">Portland & Remote</text>
+            </svg>
+          </div>
+          <div class="mt-10 space-y-4 text-[14px] leading-relaxed">
+            <div><div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-1">Email</div><a href="mailto:hello@northstar.studio" class="border-b border-[#1A1A1A]/20 hover:border-[#1A1A1A] pb-0.5">hello@northstar.studio</a></div>
+            <div><div class="text-[11px] uppercase tracking-widest text-[#1A1A1A]/50 mb-1">Office</div><p class="text-[#1A1A1A]/70">By appointment — Portland, Oregon<br>Working globally</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="border-t border-[#1A1A1A]/10 mt-20">
+  <div class="max-w-[1400px] mx-auto px-6 lg:px-12 py-10 flex flex-col md:flex-row justify-between gap-6 text-[13px] text-[#1A1A1A]/60">
+    <div>© 2025 Northstar Consulting</div>
+    <div class="flex gap-8"><a href="#" class="hover:text-[#1A1A1A]">Instagram</a><a href="#" class="hover:text-[#1A1A1A]">LinkedIn</a><a href="#" class="hover:text-[#1A1A1A]">Privacy</a></div>
+  </div>
+</footer>
+
+<!-- MODAL -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div id="modalBg" class="absolute inset-0 bg-[#1A1A1A]/70 backdrop-blur-md opacity-0 transition-opacity duration-300"></div>
+  <div class="relative h-full flex items-center justify-center p-4 lg:p-8 pointer-events-none">
+    <div id="modalCard" class="bg-[#FAF7F2] w-full max-w-[960px] max-h-[90vh] flex flex-col rounded-[2px] shadow-2xl translate-y-8 opacity-0 transition duration-500 pointer-events-auto">
+      <div class="flex justify-between items-center p-6 lg:p-8 border-b border-[#1A1A1A]/10 bg-[#FAF7F2] shrink-0">
+        <div id="modalTitle" class="font-serif text-[28px]"></div>
+        <button id="modalClose" class="w-9 h-9 rounded-full border border-[#1A1A1A]/20 flex items-center justify-center hover:bg-[#1A1A1A] hover:text-[#FAF7F2] transition">✕</button>
+      </div>
+      <div id="modalBody" class="p-6 lg:p-12 overflow-y-auto overscroll-contain" style="max-height: calc(90vh - 88px);"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Lenis smooth scroll
+const lenis = new Lenis({ lerp: 0.09, smoothWheel: true });
+function raf(t){ lenis.raf(t); requestAnimationFrame(raf) } requestAnimationFrame(raf);
+
+// Cursor
+const cursor = document.getElementById('cursor');
+let mouseX = 0, mouseY = 0, cx = 0, cy = 0;
+window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY });
+function loop(){ cx += (mouseX - cx)*0.2; cy += (mouseY - cy)*0.2; cursor.style.transform = `translate(${cx}px, ${cy}px)`; requestAnimationFrame(loop) } loop();
+document.querySelectorAll('a, button, [data-open], .project-card').forEach(el=>{
+  el.addEventListener('mouseenter',()=>cursor.classList.add('is-hover'));
+  el.addEventListener('mouseleave',()=>cursor.classList.remove('is-hover'));
+});
+
+// Mobile menu
+const menuBtn = document.getElementById('menuBtn');
+const mobileMenu = document.getElementById('mobileMenu');
+menuBtn.addEventListener('click', ()=> mobileMenu.classList.toggle('hidden') );
+mobileMenu.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>mobileMenu.classList.add('hidden')));
+
+// Pages
+const pages = document.querySelectorAll('.page');
+let current = document.getElementById('page-home');
+function setActiveNav(hash){
+  document.querySelectorAll('[data-nav]').forEach(a=>{
+    a.classList.toggle('active', a.getAttribute('href') === `#${hash}`);
+  });
+}
+function navigate(hash){
+  const target = (hash || 'home').replace('#','');
+  const next = document.getElementById(`page-${target}`);
+  if(!next || next === current) return;
+  lenis.stop();
+  gsap.to(current, { opacity:0, y:16, duration:.35, ease:'power2.out', onComplete:()=>{
+    current.classList.add('hidden');
+    gsap.set(current, {clearProps:'all'});
+    next.classList.remove('hidden');
+    gsap.fromTo(next, {opacity:0, y:16}, {opacity:1, y:0, duration:.6, ease:'power2.out', onComplete:()=>{ lenis.start(); lenis.scrollTo(0,{immediate:true}) }});
+    current = next;
+  }});
+  setActiveNav(target);
+  window.scrollTo(0,0);
+}
+window.addEventListener('hashchange', ()=> navigate(location.hash));
+window.addEventListener('load', ()=>{
+  navigate(location.hash || '#home');
+  setActiveNav((location.hash||'#home').replace('#',''));
+});
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click', e=>{
+    const h = a.getAttribute('href');
+    if(h.length>1){ location.hash = h; }
+  });
+});
+
+// Work filters
+const filterBtns = document.querySelectorAll('#workFilters button');
+const workItems = document.querySelectorAll('[data-work-item]');
+filterBtns.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    filterBtns.forEach(b=>{ b.classList.remove('bg-[#1A1A1A]','text-[#FAF7F2]'); b.classList.add('border-[#1A1A1A]/20') });
+    btn.classList.add('bg-[#1A1A1A]','text-[#FAF7F2]'); btn.classList.remove('border-[#1A1A1A]/20');
+    const f = btn.dataset.filter;
+    workItems.forEach(item=>{
+      const show = f==='all' || item.dataset.category === f;
+      gsap.to(item, {opacity: show?1:0.2, scale: show?1:0.98, duration:.4, ease:'power2.out', onStart:()=>{ item.style.pointerEvents = show?'auto':'none' }});
+    });
+  });
+});
+
+// Modal data
+const projects = {
+  mare: { title:'Mare Ceramics', img:'https://images.unsplash.com/photo-1493106641515-6b5631de4bb9?w=1600&q=80', body:`<div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-12"><div><img src="https://images.unsplash.com/photo-1493106641515-6b5631de4bb9?w=1600&q=80" class="w-full aspect-[4/3] object-cover"><div class="grid grid-cols-2 gap-4 mt-4"><img src="https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=800&q=80" class="aspect-square object-cover w-full"><img src="https://images.unsplash.com/photo-1603199506016-b9a594b593c0?w=800&q=80" class="aspect-square object-cover w-full"></div></div><div><p class="text-[15px] leading-relaxed text-[#1A1A1A]/80">A complete brand system for a coastal ceramics studio. We developed naming architecture, a quiet wordmark, and a tactile palette rooted in clay, salt, and morning light. The website prioritizes process photography and slow editorial.</p><div class="mt-8 space-y-3 text-[14px]"><div class="flex justify-between border-b border-[#1A1A1A]/10 py-2"><span class="text-[#1A1A1A]/60">Scope</span><span>Brand, Web, Content</span></div><div class="flex justify-between border-b border-[#1A1A1A]/10 py-2"><span class="text-[#1A1A1A]/60">Year</span><span>2024</span></div><div class="flex justify-between border-b border-[#1A1A1A]/10 py-2"><span class="text-[#1A1A1A]/60">Result</span><span>+68% email list, wholesale up 2.4x</span></div></div></div></div>` },
+  kin: { title:'Kin Skincare', img:'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=1600&q=80', body:`<div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-12"><div><img src="https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=1600&q=80" class="w-full aspect-[4/3] object-cover"></div><div><p class="text-[15px] leading-relaxed text-[#1A1A1A]/80">Growth system focused on retention, not discounts. We rebuilt lifecycle flows, introduced a skin journal, and designed educational packaging inserts. Paid spend down 31%, LTV up 44%.</p></div></div>` },
+  form: { title:'Form Architecture', img:'https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=1600&q=80', body:`<div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-12"><div><img src="https://images.unsplash.com/photo-1487958449943-2429e8be8625?w=1600&q=80" class="w-full aspect-[4/3] object-cover"></div><div><p class="text-[15px] leading-relaxed text-[#1A1A1A]/80">Editorial platform to publish research, drawings, and essays. We created a modular design language that lets projects breathe, with a reading experience inspired by print journals.</p></div></div>` },
+  atelier: { title:'Atelier Coffee', img:'https://images.unsplash.com/photo-1445116572660-236099ec97a0?w=1600&q=80', body:`<p class="text-[15px]">Neighborhood coffee brand with a focus on origin stories and seasonal menus.</p>` },
+  nova: { title:'Nova Atelier', img:'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1600&q=80', body:`<p class="text-[15px]">Fashion studio editorial and lookbook system.</p>` },
+  lumen: { title:'Lumen Books', img:'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=1600&q=80', body:`<p class="text-[15px]">Independent bookstore identity and reading club.</p>` },
+  otto: { title:'Otto Restaurant', img:'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1600&q=80', body:`<p class="text-[15px]">Seasonal restaurant with reservation growth system.</p>` },
+  terra: { title:'Terra Furniture', img:'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=1600&q=80', body:`<p class="text-[15px]">Furniture maker content and product storytelling.</p>` },
+  sage: { title:'Sage Wellness', img:'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=1600&q=80', body:`<p class="text-[15px]">Wellness studio brand and membership experience.</p>` },
+};
+
+const modal = document.getElementById('modal');
+const modalBg = document.getElementById('modalBg');
+const modalCard = document.getElementById('modalCard');
+const modalTitle = document.getElementById('modalTitle');
+const modalBody = document.getElementById('modalBody');
+document.getElementById('modalClose').onclick = closeModal;
+modalBg.onclick = closeModal;
+function openModal(key){
+  const p = projects[key]; if(!p) return;
+  modalTitle.textContent = p.title;
+  modalBody.innerHTML = p.body;
+  modal.classList.remove('hidden');
+  setTimeout(()=>{ modalBg.style.opacity = 1; modalCard.style.opacity = 1; modalCard.style.transform = 'translateY(0)'; }, 10);
+  document.body.style.overflow = 'hidden'; lenis.stop();
+}
+function closeModal(){
+  modalBg.style.opacity = 0; modalCard.style.opacity = 0; modalCard.style.transform = 'translateY(2rem)';
+  setTimeout(()=>{ modal.classList.add('hidden'); document.body.style.overflow=''; lenis.start(); }, 300);
+}
+document.querySelectorAll('[data-open]').forEach(el=> el.addEventListener('click', ()=> openModal(el.dataset.open)));
+
+// Journal modal
+const journals = {
+ 1:{title:'The case for slower marketing', body:`<img src="https://images.unsplash.com/photo-1455390582262-044cdead277a?w=1600&q=80" class="w-full aspect-[16/9] object-cover mb-8"><div class="prose max-w-none"><p class="text-[17px] leading-relaxed">Brands that publish less, but with more care, compound attention. We outline a quarterly editorial cadence, simple measurement, and examples from our studio practice.</p></div>`},
+ 2:{title:'A simple brand brief that works', body:`<img src="https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1600&q=80" class="w-full aspect-[16/9] object-cover mb-8"><p class="text-[17px] leading-relaxed">Seven questions to align before design starts — from audience to proof to voice.</p>`},
+ 3:{title:'Designing for longevity', body:`<img src="https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=1600&q=80" class="w-full aspect-[16/9] object-cover mb-8"><p class="text-[17px] leading-relaxed">Systems over campaigns. How we build flexible foundations.</p>`},
+ 4:{title:'What we learned from makers', body:`<img src="https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=1600&q=80" class="w-full aspect-[16/9] object-cover mb-8"><p class="text-[17px] leading-relaxed">Field notes from 12 studio visits across the Pacific Northwest.</p>`},
+};
+document.querySelectorAll('[data-open-journal]').forEach(el=> el.addEventListener('click', ()=>{
+  const j = journals[el.dataset.openJournal]; modalTitle.textContent = j.title; modalBody.innerHTML = j.body; openModal('kin'); modalTitle.textContent = j.title; modalBody.innerHTML = j.body; // reuse open
+  modal.classList.remove('hidden'); setTimeout(()=>{ modalBg.style.opacity=1; modalCard.style.opacity=1; modalCard.style.transform='translateY(0)'},10); document.body.style.overflow='hidden'; lenis.stop();
+}));
+
+// Contact form
+const form = document.getElementById('contactForm');
+const formMsg = document.getElementById('formMsg');
+form?.addEventListener('submit', e=>{
+  e.preventDefault();
+  const data = new FormData(form);
+  const email = data.get('email')||'';
+  if(!data.get('name') || !email.includes('@') || !data.get('message')){
+    formMsg.textContent = 'Please fill in your name, valid email, and message.';
+    formMsg.style.color = '#B66A4E'; return;
+  }
+  formMsg.textContent = 'Thank you — we’ll reply within two business days.';
+  formMsg.style.color = '#8B9B8F';
+  form.reset();
+});
+
+// Three.js subtle blobs
+const canvas = document.getElementById('hero-canvas');
+if(canvas){
+  const renderer = new THREE.WebGLRenderer({canvas, alpha:true, antialias:true});
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100); camera.position.z = 8;
+  const resize = ()=>{ const w = canvas.clientWidth||window.innerWidth; const h = canvas.clientHeight||400; renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix(); };
+  resize(); window.addEventListener('resize', resize);
+  const mat1 = new THREE.MeshBasicMaterial({ color:0x8B9B8F, transparent:true, opacity:0.14 });
+  const mat2 = new THREE.MeshBasicMaterial({ color:0xE6DDD3, transparent:true, opacity:0.18 });
+  const g = new THREE.SphereGeometry(1.8, 64,64);
+  const b1 = new THREE.Mesh(g, mat1); const b2 = new THREE.Mesh(g, mat2);
+  b1.position.set(-1.5, 0.3, 0); b2.position.set(1.8, -0.4, -1);
+  scene.add(b1,b2);
+  let t=0; function animate(){ t+=0.003; b1.scale.setScalar(1+Math.sin(t)*0.06); b1.position.y = 0.3+Math.sin(t*1.2)*0.15; b2.scale.setScalar(1.2+Math.cos(t*0.9)*0.05); b2.position.y = -0.4+Math.cos(t*1.1)*0.12; renderer.render(scene,camera); requestAnimationFrame(animate) } animate();
+}
+</script>
+</body>
+</html>
